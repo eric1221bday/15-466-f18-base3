@@ -7,57 +7,64 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp> //allows the use of 'uvec2' as an unordered_map key
 
-struct WalkMesh {
-	//Walk mesh will keep track of triangles, vertices:
-	std::vector< glm::vec3 > vertices;
-	std::vector< glm::vec3 > normals; //normals for interpolated 'up' direction
-	std::vector< glm::uvec3 > triangles; //CCW-oriented
+struct WalkMesh
+{
+    //Walk mesh will keep track of triangles, vertices:
+    std::vector<glm::vec3> vertices;
+    std::vector<glm::vec3> normals; //normals for interpolated 'up' direction
+    std::vector<glm::uvec3> triangles; //CCW-oriented
 
-	//This "next vertex" map includes [a,b]->c, [b,c]->a, and [c,a]->b for each triangle, and is useful for checking what's over an edge from a given point:
-	std::unordered_map< glm::uvec2, uint32_t > next_vertex;
+    //This "next vertex" map includes [a,b]->c, [b,c]->a, and [c,a]->b for each triangle, and is useful for checking what's over an edge from a given point:
+    std::unordered_map<glm::uvec2, uint32_t> next_vertex;
 
+    //Construct new WalkMesh and build next_vertex structure:
+    WalkMesh(std::vector<glm::vec3> const &vertices_,
+             std::vector<glm::vec3> const &normals_,
+             std::vector<glm::uvec3> const &triangles_);
 
-	//Construct new WalkMesh and build next_vertex structure:
-	WalkMesh(std::vector< glm::vec3 > const &vertices_, std::vector< glm::vec3 > const &normals_, std::vector< glm::uvec3 > const &triangles_);
+    struct WalkPoint
+    {
+        glm::uvec3 triangle = glm::uvec3(-1U); //indices of current triangle
+        glm::vec3
+            weights = glm::vec3(std::numeric_limits<float>::quiet_NaN()); //barycentric coordinates for current point
+    };
 
-	struct WalkPoint {
-		glm::uvec3 triangle = glm::uvec3(-1U); //indices of current triangle
-		glm::vec3 weights = glm::vec3(std::numeric_limits< float >::quiet_NaN()); //barycentric coordinates for current point
-	};
+    //used to initialize walking -- finds the closest point on the walk mesh:
+    // (should only need to call this at the start of a level)
+    WalkPoint start(glm::vec3 const &world_point) const;
 
-	//used to initialize walking -- finds the closest point on the walk mesh:
-	// (should only need to call this at the start of a level)
-	WalkPoint start(glm::vec3 const &world_point) const;
+    //used to update walk point:
+    void walk(WalkPoint &wp, glm::vec3 const &step) const;
 
-	//used to update walk point:
-	void walk(WalkPoint &wp, glm::vec3 const &step) const;
+    //used to read back results of walking:
+    glm::vec3 world_point(WalkPoint const &wp) const
+    {
+        return wp.weights.x * vertices[wp.triangle.x]
+            + wp.weights.y * vertices[wp.triangle.y]
+            + wp.weights.z * vertices[wp.triangle.z];
+    }
 
-	//used to read back results of walking:
-	glm::vec3 world_point(WalkPoint const &wp) const {
-		return wp.weights.x * vertices[wp.triangle.x]
-		     + wp.weights.y * vertices[wp.triangle.y]
-		     + wp.weights.z * vertices[wp.triangle.z];
-	}
-
-	glm::vec3 world_normal(WalkPoint const &wp) const {
-		return glm::normalize(
-			wp.weights.x * normals[wp.triangle.x]
-		     + wp.weights.y * normals[wp.triangle.y]
-		     + wp.weights.z * normals[wp.triangle.z]
-		);
-	}
+    glm::vec3 world_normal(WalkPoint const &wp) const
+    {
+        return glm::normalize(
+            wp.weights.x * normals[wp.triangle.x]
+                + wp.weights.y * normals[wp.triangle.y]
+                + wp.weights.z * normals[wp.triangle.z]
+        );
+    }
 
 };
 
-struct WalkMeshes {
-	//load a list of named WalkMeshes from a file:
-	WalkMeshes(std::string const &filename);
+struct WalkMeshes
+{
+    //load a list of named WalkMeshes from a file:
+    WalkMeshes(std::string const &filename);
 
-	//retrieve a WalkMesh by name:
-	WalkMesh const &lookup(std::string const &name) const;
+    //retrieve a WalkMesh by name:
+    WalkMesh const &lookup(std::string const &name) const;
 
-	//internals:
-	std::map< std::string, WalkMesh > meshes;
+    //internals:
+    std::map<std::string, WalkMesh> meshes;
 };
 
 /*

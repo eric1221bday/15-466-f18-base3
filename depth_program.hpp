@@ -1,14 +1,15 @@
 #include "GL.hpp"
 #include "Load.hpp"
 
-struct DepthProgram {
-	//opengl program object:
-	GLuint program = 0;
+struct DepthProgram
+{
+    //opengl program object:
+    GLuint program = 0;
 
-	//uniform locations:
-	GLuint object_to_clip_mat4 = -1U;
+    //uniform locations:
+    GLuint object_to_clip_mat4 = -1U;
 
-	DepthProgram();
+    DepthProgram();
 };
 
-extern Load< DepthProgram > depth_program;
+extern Load<DepthProgram> depth_program;
