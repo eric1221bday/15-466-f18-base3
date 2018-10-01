@@ -32,6 +32,7 @@ set(CLIENT_FILES
         vertex_color_program.cpp
         texture_program.cpp
         depth_program.cpp
+		shady_program.cpp
         Scene.cpp
         Mode.cpp
         GameMode.cpp
@@ -51,8 +52,8 @@ add_custom_target(SDL2CopyBinaries
 
 add_custom_target(CopyAssets
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/dist/menu.p ${CMAKE_BINARY_DIR}/
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/dist/vignette.pnct ${CMAKE_BINARY_DIR}/
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/dist/vignette.scene ${CMAKE_BINARY_DIR}/
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/dist/gateway.pnct ${CMAKE_BINARY_DIR}/
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/dist/gateway.scene ${CMAKE_BINARY_DIR}/
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/dist/textures ${CMAKE_BINARY_DIR}/textures
         )
 
@@ -65,6 +66,5 @@ target_link_libraries(main ${OPENGL_LIBRARIES} ${SDL2_LIBRARIES} ${PNG_LIBRARIES
 add_dependencies(main CopyAssets)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    add_dependencies(server SDL2CopyBinaries)
-    add_dependencies(client SDL2CopyBinaries)
+    add_dependencies(main SDL2CopyBinaries)
 endif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")

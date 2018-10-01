@@ -13,6 +13,7 @@
 #include "load_save_png.hpp"
 #include "texture_program.hpp"
 #include "depth_program.hpp"
+#include "shady_program.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -25,12 +26,17 @@
 
 Load<MeshBuffer> meshes(LoadTagDefault, []()
 {
-    return new MeshBuffer(data_path("vignette.pnct"));
+    return new MeshBuffer(data_path("gateway.pnct"));
 });
 
 Load<GLuint> meshes_for_texture_program(LoadTagDefault, []()
 {
     return new GLuint(meshes->make_vao_for_program(texture_program->program));
+});
+
+Load<GLuint> meshes_for_shady_program(LoadTagDefault, []()
+{
+	return new GLuint(meshes->make_vao_for_program(shady_program->program));
 });
 
 Load<GLuint> meshes_for_depth_program(LoadTagDefault, []()
@@ -163,6 +169,13 @@ Load<Scene> scene(LoadTagDefault, []()
     texture_program_info.mv_mat4x3 = texture_program->object_to_light_mat4x3;
     texture_program_info.itmv_mat3 = texture_program->normal_to_light_mat3;
 
+	Scene::Object::ProgramInfo shady_program_info;
+	shady_program_info.program = shady_program->program;
+	shady_program_info.vao = *meshes_for_shady_program;
+	shady_program_info.mvp_mat4 = shady_program->object_to_clip_mat4;
+	shady_program_info.mv_mat4x3 = shady_program->object_to_light_mat4x3;
+	shady_program_info.itmv_mat3 = shady_program->normal_to_light_mat3;
+
     Scene::Object::ProgramInfo depth_program_info;
     depth_program_info.program = depth_program->program;
     depth_program_info.vao = *meshes_for_depth_program;
@@ -170,7 +183,7 @@ Load<Scene> scene(LoadTagDefault, []()
 
 
     //load transform hierarchy:
-    ret->load(data_path("vignette.scene"), [&](Scene &s, Scene::Transform *t, std::string const &m)
+    ret->load(data_path("gateway.scene"), [&](Scene &s, Scene::Transform *t, std::string const &m)
     {
         Scene::Object *obj = s.new_object(t);
 
@@ -181,6 +194,10 @@ Load<Scene> scene(LoadTagDefault, []()
         else if (t->name == "Pedestal") {
             obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
         }
+		else if (t->name == "Asteroid") {
+			obj->programs[Scene::Object::ProgramTypeDefault] = shady_program_info;
+			obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
+		}
         else {
             obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *white_tex;
         }
@@ -386,7 +403,7 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
 
     //Draw scene to off-screen framebuffer:
-    glBindFramebuffer(GL_FRAMEBUFFER, fbs.fb);
+    //glBindFramebuffer(GL_FRAMEBUFFER, fbs.fb);
     glViewport(0, 0, drawable_size.x, drawable_size.y);
 
     camera->aspect = drawable_size.x / float(drawable_size.y);
@@ -400,37 +417,74 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    //set up light positions:
-    glUseProgram(texture_program->program);
+	{
+		//set up light positions:
+		glUseProgram(texture_program->program);
 
-    //don't use distant directional light at all (color == 0):
-    glUniform3fv(texture_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
-    glUniform3fv(texture_program->sun_direction_vec3, 1, glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
-    //use hemisphere light for subtle ambient light:
-    glUniform3fv(texture_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
-    glUniform3fv(texture_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
+		//don't use distant directional light at all (color == 0):
+		glUniform3fv(texture_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
+		glUniform3fv(texture_program->sun_direction_vec3, 1, glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
+		//use hemisphere light for subtle ambient light:
+		glUniform3fv(texture_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
+		glUniform3fv(texture_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
 
-    glm::mat4 world_to_spot =
-        //This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
-        // coordinates ([0,1]^2) and depth map Z values ([0,1]):
-        glm::mat4(
-            0.5f, 0.0f, 0.0f, 0.0f,
-            0.0f, 0.5f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.5f, 0.0f,
-            0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
-        )
-            //this is the world-to-clip matrix used when rendering the shadow map:
-            * spot->make_projection() * spot->transform->make_world_to_local();
+		glm::mat4 world_to_spot =
+			//This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
+			// coordinates ([0,1]^2) and depth map Z values ([0,1]):
+			glm::mat4(
+				0.5f, 0.0f, 0.0f, 0.0f,
+				0.0f, 0.5f, 0.0f, 0.0f,
+				0.0f, 0.0f, 0.5f, 0.0f,
+				0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
+			)
+			//this is the world-to-clip matrix used when rendering the shadow map:
+			* spot->make_projection() * spot->transform->make_world_to_local();
 
-    glUniformMatrix4fv(texture_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
+		glUniformMatrix4fv(texture_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
 
-    glm::mat4 spot_to_world = spot->transform->make_local_to_world();
-    glUniform3fv(texture_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
-    glUniform3fv(texture_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
-    glUniform3fv(texture_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+		glm::mat4 spot_to_world = spot->transform->make_local_to_world();
+		glUniform3fv(texture_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
+		glUniform3fv(texture_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
+		glUniform3fv(texture_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
 
-    glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
-    glUniform2fv(texture_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+		glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
+		glUniform2fv(texture_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+	}
+
+	{
+		//set up light positions:
+		glUseProgram(shady_program->program);
+
+		//don't use distant directional light at all (color == 0):
+		glUniform3fv(shady_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
+		glUniform3fv(shady_program->sun_direction_vec3, 1, glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
+		//use hemisphere light for subtle ambient light:
+		glUniform3fv(shady_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
+		glUniform3fv(shady_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
+
+		glm::mat4 world_to_spot =
+			//This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
+			// coordinates ([0,1]^2) and depth map Z values ([0,1]):
+			glm::mat4(
+				0.5f, 0.0f, 0.0f, 0.0f,
+				0.0f, 0.5f, 0.0f, 0.0f,
+				0.0f, 0.0f, 0.5f, 0.0f,
+				0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
+			)
+			//this is the world-to-clip matrix used when rendering the shadow map:
+			* spot->make_projection() * spot->transform->make_world_to_local();
+
+		glUniformMatrix4fv(shady_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
+
+		glm::mat4 spot_to_world = spot->transform->make_local_to_world();
+		glUniform3fv(shady_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
+		glUniform3fv(shady_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
+		glUniform3fv(shady_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+
+		glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
+		glUniform2fv(shady_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+	}
+
 
     //This code binds texture index 1 to the shadow map:
     // (note that this is a bit brittle -- it depends on none of the objects in the scene having a texture of
@@ -456,14 +510,14 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
 
     //Copy scene from color buffer to screen, performing post-processing effects:
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, fbs.color_tex);
-    glUseProgram(*blur_program);
-    glBindVertexArray(*empty_vao);
+    //glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, fbs.color_tex);
+    //glUseProgram(*blur_program);
+    //glBindVertexArray(*empty_vao);
 
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    //glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    glUseProgram(0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    //glUseProgram(0);
+    //glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, 0);
 }
