@@ -11,6 +11,7 @@ ShadyProgram::ShadyProgram()
         "uniform mat4x3 object_to_light;\n"
         "uniform mat3 normal_to_light;\n"
         "uniform mat4 light_to_spot;\n"
+        "uniform mat4 light_to_target;\n"
         "layout(location=0) in vec4 Position;\n" //note: layout keyword used to make sure that the location-0 attribute is always bound to something
         "in vec3 Normal;\n"
         "in vec4 Color;\n"
@@ -20,10 +21,12 @@ ShadyProgram::ShadyProgram()
         "out vec4 color;\n"
         "out vec2 texCoord;\n"
         "out vec4 spotPosition;\n"
+        "out vec4 targetPosition;\n"
         "void main() {\n"
         "	gl_Position = object_to_clip * Position;\n"
         "	position = object_to_light * Position;\n"
         "	spotPosition = light_to_spot * vec4(position, 1.0);\n"
+        "	targetPosition = light_to_target * vec4(position, 1.0);\n"
         "	normal = normal_to_light * Normal;\n"
         "	color = Color;\n"
         "	texCoord = TexCoord;\n"
@@ -35,6 +38,8 @@ ShadyProgram::ShadyProgram()
         "uniform vec3 sky_color;\n"
         "uniform vec3 spot_position;\n"
         "uniform vec3 spot_direction;\n"
+        "uniform vec3 target_position;\n"
+        "uniform vec3 target_direction;\n"
         "uniform vec3 spot_color;\n"
         "uniform vec2 spot_outer_inner;\n"
         "uniform vec2 screen_size;\n"
@@ -98,9 +103,13 @@ ShadyProgram::ShadyProgram()
     spot_color_vec3 = glGetUniformLocation(program, "spot_color");
     spot_outer_inner_vec2 = glGetUniformLocation(program, "spot_outer_inner");
 
+    target_position_vec3 = glGetUniformLocation(program, "target_position");
+    target_direction_vec3 = glGetUniformLocation(program, "target_direction");
+
     screen_size_vec2 = glGetUniformLocation(program, "screen_size");
 
     light_to_spot_mat4 = glGetUniformLocation(program, "light_to_spot");
+    light_to_target_mat4 = glGetUniformLocation(program, "light_to_target");
 
     glUseProgram(program);
 

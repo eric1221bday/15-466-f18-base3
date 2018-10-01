@@ -439,6 +439,10 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
     GL_ERRORS();
 
+    glm::mat4 target_camera_projection;
+    glm::mat4 target_camera_world_to_local;
+    glm::mat4 target_camera_to_world;
+
     {
         //Draw scene to shadow map for target viewpoint:
         glBindFramebuffer(GL_FRAMEBUFFER, fbs.fb);
@@ -468,6 +472,10 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
         for (auto &info : stones) {
             info.stone->transform->rotation = glm::angleAxis(current_time * info.velocity + info.angle, info.axis);
         }
+
+        target_camera_projection = camera->make_projection();
+        target_camera_world_to_local = camera->transform->make_world_to_local();
+        target_camera_to_world = camera->transform->make_local_to_world();
 
         // reset camera to current viewpoint
         camera_parent_transform->rotation = glm::angleAxis(viewpoint_angle, glm::vec3(0.0f, 0.0f, 1.0f));
@@ -561,6 +569,21 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
         glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
         glUniform2fv(shady_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+
+        glm::mat4 world_to_target =
+            glm::mat4(
+                0.5f, 0.0f, 0.0f, 0.0f,
+                0.0f, 0.5f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.5f, 0.0f,
+                0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
+            )
+                //this is the world-to-clip matrix used when rendering the shadow map:
+                * target_camera_projection * target_camera_world_to_local;
+
+        glUniformMatrix4fv(shady_program->light_to_target_mat4, 1, GL_FALSE, glm::value_ptr(world_to_target));
+
+        glUniform3fv(shady_program->target_position_vec3, 1, glm::value_ptr(glm::vec3(target_camera_to_world[3])));
+        glUniform3fv(shady_program->target_direction_vec3, 1, glm::value_ptr(-glm::vec3(target_camera_to_world[2])));
 
         glUniform2fv(shady_program->screen_size_vec2, 1, glm::value_ptr(glm::vec2(drawable_size.x, drawable_size.y)));
     }
