@@ -1,2 +1,3 @@
 wood.png is a crop of https://www.pexels.com/photo/brown-close-up-hd-wallpaper-surface-172289/ (free for commercial use, no attribution required)
 marble.png is an edited crop of https://www.pexels.com/photo/abstract-backdrop-background-floor-921776/ (free for commercial use, no attribution required)
+Stones_01_Atlas_Diffuse_01.png and associated meshes is from https://www.blendswap.com/blends/view/70925 (under creative commons, credit goes to OliverMH)

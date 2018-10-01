@@ -40,6 +40,7 @@ ShadyProgram::ShadyProgram()
         "uniform vec2 screen_size;\n"
         "uniform sampler2D tex;\n"
         "uniform sampler2DShadow spot_depth_tex;\n"
+        "uniform sampler2DShadow target_depth_tex;\n"
         "uniform sampler2D gateway_tex;\n"
         "in vec3 position;\n"
         "in vec3 normal;\n"
@@ -74,12 +75,12 @@ ShadyProgram::ShadyProgram()
         "vec2 lower_margin = screen_size / 3.0f;\n"
         "vec2 upper_margin = 2.0f * screen_size / 3.0f;\n"
         "vec2 scaling = 1.0f / (upper_margin - lower_margin);\n"
-        //"	if (gl_FragCoord.x > lower_margin.x && gl_FragCoord.y > lower_margin.y &&"
-        //"       gl_FragCoord.x < upper_margin.x && gl_FragCoord.y < upper_margin.y) {\n"
-        //"		fragColor = texture(gateway_tex, gl_FragCoord.xy * scaling - lower_margin);\n"
-        //"	} else {\n"
+        "	if (gl_FragCoord.x > lower_margin.x && gl_FragCoord.y > lower_margin.y &&"
+        "       gl_FragCoord.x < upper_margin.x && gl_FragCoord.y < upper_margin.y) {\n"
+        "		fragColor = texture(gateway_tex, (gl_FragCoord.xy - lower_margin) * scaling);\n"
+        "	} else {\n"
         "      fragColor = texture(tex, texCoord) * vec4(color.rgb * total_light, color.a);\n"
-        //"	}\n"
+        "	}\n"
         "}\n"
     );
 
@@ -109,8 +110,11 @@ ShadyProgram::ShadyProgram()
     GLuint spot_depth_tex_sampler2D = glGetUniformLocation(program, "spot_depth_tex");
     glUniform1i(spot_depth_tex_sampler2D, 1);
 
+    GLuint target_depth_tex_sampler2D = glGetUniformLocation(program, "target_depth_tex");
+    glUniform1i(target_depth_tex_sampler2D, 2);
+
     GLuint gateway_tex_sampler2D = glGetUniformLocation(program, "gateway_tex");
-    glUniform1i(gateway_tex_sampler2D, 2);
+    glUniform1i(gateway_tex_sampler2D, 3);
 
     glUseProgram(0);
 

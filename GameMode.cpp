@@ -3,7 +3,6 @@
 #include "MenuMode.hpp"
 #include "Load.hpp"
 #include "MeshBuffer.hpp"
-#include "Scene.hpp"
 #include "gl_errors.hpp" //helper for dumpping OpenGL error messages
 #include "check_fb.hpp" //helper for checking currently bound OpenGL framebuffer
 #include "read_chunk.hpp" //helper for reading a vector of structures from a file
@@ -22,6 +21,7 @@
 #include <map>
 #include <cstddef>
 #include <random>
+#include <ctime>
 
 
 Load<MeshBuffer> meshes(LoadTagDefault, []()
@@ -36,7 +36,7 @@ Load<GLuint> meshes_for_texture_program(LoadTagDefault, []()
 
 Load<GLuint> meshes_for_shady_program(LoadTagDefault, []()
 {
-	return new GLuint(meshes->make_vao_for_program(shady_program->program));
+    return new GLuint(meshes->make_vao_for_program(shady_program->program));
 });
 
 Load<GLuint> meshes_for_depth_program(LoadTagDefault, []()
@@ -52,54 +52,6 @@ Load<GLuint> empty_vao(LoadTagDefault, []()
     glBindVertexArray(vao);
     glBindVertexArray(0);
     return new GLuint(vao);
-});
-
-Load<GLuint> blur_program(LoadTagDefault, []()
-{
-    GLuint program = compile_program(
-        //this draws a triangle that covers the entire screen:
-        "#version 330\n"
-        "void main() {\n"
-        "	gl_Position = vec4(4 * (gl_VertexID & 1) - 1,  2 * (gl_VertexID & 2) - 1, 0.0, 1.0);\n"
-        "}\n",
-        //NOTE on reading screen texture:
-        //texelFetch() gives direct pixel access with integer coordinates, but accessing out-of-bounds pixel is undefined:
-        //	vec4 color = texelFetch(tex, ivec2(gl_FragCoord.xy), 0);
-        //texture() requires using [0,1] coordinates, but handles out-of-bounds more gracefully
-        // (using wrap settings of underlying texture):
-        //	vec4 color = texture(tex, gl_FragCoord.xy / textureSize(tex,0));
-
-        "#version 330\n"
-        "uniform sampler2D tex;\n"
-        "out vec4 fragColor;\n"
-        "void main() {\n"
-        "	vec2 at = (gl_FragCoord.xy - 0.5 * textureSize(tex, 0)) / textureSize(tex, 0).y;\n"
-        //make blur amount more near the edges and less in the middle:
-        "	float amt = (0.01 * textureSize(tex,0).y) * max(0.0,(length(at) - 0.3)/0.2);\n"
-        //pick a vector to move in for blur using function inspired by:
-        //https://stackoverflow.com/questions/12964279/whats-the-origin-of-this-glsl-rand-one-liner
-        "	vec2 ofs = amt * normalize(vec2(\n"
-        "		fract(dot(gl_FragCoord.xy ,vec2(12.9898,78.233))),\n"
-        "		fract(dot(gl_FragCoord.xy ,vec2(96.3869,-27.5796)))\n"
-        "	));\n"
-        //do a four-pixel average to blur:
-        "	vec4 blur =\n"
-        "		+ 0.25 * texture(tex, (gl_FragCoord.xy + vec2(ofs.x,ofs.y)) / textureSize(tex, 0))\n"
-        "		+ 0.25 * texture(tex, (gl_FragCoord.xy + vec2(-ofs.y,ofs.x)) / textureSize(tex, 0))\n"
-        "		+ 0.25 * texture(tex, (gl_FragCoord.xy + vec2(-ofs.x,-ofs.y)) / textureSize(tex, 0))\n"
-        "		+ 0.25 * texture(tex, (gl_FragCoord.xy + vec2(ofs.y,-ofs.x)) / textureSize(tex, 0))\n"
-        "	;\n"
-        "	fragColor = vec4(blur.rgb, 1.0);\n" //blur;\n"
-        "}\n"
-    );
-
-    glUseProgram(program);
-
-    glUniform1i(glGetUniformLocation(program, "tex"), 0);
-
-    glUseProgram(0);
-
-    return new GLuint(program);
 });
 
 GLuint load_texture(std::string const &filename)
@@ -133,9 +85,14 @@ Load<GLuint> marble_tex(LoadTagDefault, []()
     return new GLuint(load_texture(data_path("textures/marble.png")));
 });
 
+Load<GLuint> stone_tex(LoadTagDefault, []()
+{
+    return new GLuint(load_texture(data_path("textures/Stones_01_Atlas_Diffuse_01.png")));
+});
+
 Load<GLuint> hourglass_neb_tex(LoadTagDefault, []()
 {
-	return new GLuint(load_texture(data_path("textures/hst_hourglass_nebula.png")));
+    return new GLuint(load_texture(data_path("textures/hst_hourglass_nebula.png")));
 });
 
 Load<GLuint> white_tex(LoadTagDefault, []()
@@ -154,67 +111,66 @@ Load<GLuint> white_tex(LoadTagDefault, []()
     return new GLuint(tex);
 });
 
-Scene::Transform *camera_parent_transform = nullptr;
+static Scene::Transform *camera_parent_transform = nullptr;
 
-Scene::Camera *camera = nullptr;
+static Scene::Camera *camera = nullptr;
 
-Scene::Transform *spot_parent_transform = nullptr;
+static Scene::Transform *spot_parent_transform = nullptr;
 
-Scene::Lamp *spot = nullptr;
+static Scene::Lamp *spot = nullptr;
+
+static std::vector<std::string> stone_types = {};
+
+static Scene *current_scene = nullptr;
 
 Load<Scene> scene(LoadTagDefault, []()
 {
     Scene *ret = new Scene;
+    current_scene = ret;
 
     //pre-build some program info (material) blocks to assign to each object:
-    Scene::Object::ProgramInfo texture_program_info;
-    texture_program_info.program = texture_program->program;
-    texture_program_info.vao = *meshes_for_texture_program;
-    texture_program_info.mvp_mat4 = texture_program->object_to_clip_mat4;
-    texture_program_info.mv_mat4x3 = texture_program->object_to_light_mat4x3;
-    texture_program_info.itmv_mat3 = texture_program->normal_to_light_mat3;
-
-	Scene::Object::ProgramInfo shady_program_info;
-	shady_program_info.program = shady_program->program;
-	shady_program_info.vao = *meshes_for_shady_program;
-	shady_program_info.mvp_mat4 = shady_program->object_to_clip_mat4;
-	shady_program_info.mv_mat4x3 = shady_program->object_to_light_mat4x3;
-	shady_program_info.itmv_mat3 = shady_program->normal_to_light_mat3;
-
-    Scene::Object::ProgramInfo depth_program_info;
-    depth_program_info.program = depth_program->program;
-    depth_program_info.vao = *meshes_for_depth_program;
-    depth_program_info.mvp_mat4 = depth_program->object_to_clip_mat4;
+//    Scene::Object::ProgramInfo texture_program_info;
+//    texture_program_info.program = texture_program->program;
+//    texture_program_info.vao = *meshes_for_texture_program;
+//    texture_program_info.mvp_mat4 = texture_program->object_to_clip_mat4;
+//    texture_program_info.mv_mat4x3 = texture_program->object_to_light_mat4x3;
+//    texture_program_info.itmv_mat3 = texture_program->normal_to_light_mat3;
+//
+//    Scene::Object::ProgramInfo depth_program_info;
+//    depth_program_info.program = depth_program->program;
+//    depth_program_info.vao = *meshes_for_depth_program;
+//    depth_program_info.mvp_mat4 = depth_program->object_to_clip_mat4;
 
 
     //load transform hierarchy:
     ret->load(data_path("gateway.scene"), [&](Scene &s, Scene::Transform *t, std::string const &m)
     {
-        Scene::Object *obj = s.new_object(t);
-
-        obj->programs[Scene::Object::ProgramTypeDefault] = texture_program_info;
-        if (t->name == "Platform") {
-            obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *wood_tex;
+        if (m.find("Stone") != std::string::npos) {
+            stone_types.push_back(m);
         }
-        else if (t->name == "Pedestal") {
-            obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
-        }
-		else if (t->name == "Asteroid") {
-			obj->programs[Scene::Object::ProgramTypeDefault] = shady_program_info;
-            obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
-		}
         else {
-            obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *white_tex;
+//            Scene::Object *obj = s.new_object(t);
+//
+//            obj->programs[Scene::Object::ProgramTypeDefault] = texture_program_info;
+//            if (t->name == "Platform") {
+//                obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *wood_tex;
+//            }
+//            else if (t->name == "Pedestal") {
+//                obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
+//            }
+//            else {
+//                obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *white_tex;
+//            }
+//
+//            obj->programs[Scene::Object::ProgramTypeShadow] = depth_program_info;
+//
+//            MeshBuffer::Mesh const &mesh = meshes->lookup(m);
+//            obj->programs[Scene::Object::ProgramTypeDefault].start = mesh.start;
+//            obj->programs[Scene::Object::ProgramTypeDefault].count = mesh.count;
+//
+//            obj->programs[Scene::Object::ProgramTypeShadow].start = mesh.start;
+//            obj->programs[Scene::Object::ProgramTypeShadow].count = mesh.count;
         }
-
-        obj->programs[Scene::Object::ProgramTypeShadow] = depth_program_info;
-
-        MeshBuffer::Mesh const &mesh = meshes->lookup(m);
-        obj->programs[Scene::Object::ProgramTypeDefault].start = mesh.start;
-        obj->programs[Scene::Object::ProgramTypeDefault].count = mesh.count;
-
-        obj->programs[Scene::Object::ProgramTypeShadow].start = mesh.start;
-        obj->programs[Scene::Object::ProgramTypeShadow].count = mesh.count;
     });
 
     //look up camera parent transform:
@@ -255,11 +211,72 @@ Load<Scene> scene(LoadTagDefault, []()
 });
 
 GameMode::GameMode()
+    : generator(std::time(nullptr)),
+      distribution_x(-4.0f, 4.0f),
+      distribution_y(-4.0f, 4.0f),
+      distribution_z(0.0f, 4.0f),
+      distribution_axis(-1.0f, 1.0f),
+      distribution_velocity(0.0f, 6.0f),
+      distribution_time(0.0f, 1.0f),
+      distribution_angle(0.0f, 360.f),
+      distribution_mesh(0, stone_types.size() - 1)
 {
+    Scene::Object::ProgramInfo shady_program_info;
+    shady_program_info.program = shady_program->program;
+    shady_program_info.vao = *meshes_for_shady_program;
+    shady_program_info.mvp_mat4 = shady_program->object_to_clip_mat4;
+    shady_program_info.mv_mat4x3 = shady_program->object_to_light_mat4x3;
+    shady_program_info.itmv_mat3 = shady_program->normal_to_light_mat3;
+
+    Scene::Object::ProgramInfo depth_program_info;
+    depth_program_info.program = depth_program->program;
+    depth_program_info.vao = *meshes_for_depth_program;
+    depth_program_info.mvp_mat4 = depth_program->object_to_clip_mat4;
+
+    for (uint32_t i = 0; i < asteroid_num; i++) {
+        Scene::Transform *t = current_scene->new_transform();
+
+        Scene::Object *obj = current_scene->new_object(t);
+        obj->programs[Scene::Object::ProgramTypeDefault] = shady_program_info;
+        obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *stone_tex;
+
+        obj->programs[Scene::Object::ProgramTypeShadow] = depth_program_info;
+
+        MeshBuffer::Mesh const &mesh = meshes->lookup(stone_types[distribution_mesh(generator)]);
+        obj->programs[Scene::Object::ProgramTypeDefault].start = mesh.start;
+        obj->programs[Scene::Object::ProgramTypeDefault].count = mesh.count;
+
+        obj->programs[Scene::Object::ProgramTypeShadow].start = mesh.start;
+        obj->programs[Scene::Object::ProgramTypeShadow].count = mesh.count;
+
+        stones.emplace_back(obj, 0.0f, 0.0f, glm::vec3());
+    }
+
+    reset_game();
 }
 
 GameMode::~GameMode()
 {
+}
+
+void GameMode::reset_game()
+{
+    target_time = distribution_time(generator);
+    target_viewpoint_angle = glm::radians(distribution_angle(generator));
+    viewpoint_angle = glm::radians(distribution_angle(generator));
+    current_time = distribution_time(generator);
+
+    for (auto &info : stones) {
+        info.stone->transform->scale = glm::vec3(0.03f, 0.03f, 0.03f);
+        info.stone->transform->position =
+            glm::vec3(distribution_x(generator), distribution_y(generator), distribution_z(generator));
+        info.axis = glm::normalize(glm::vec3(distribution_axis(generator),
+                                             distribution_axis(generator),
+                                             distribution_axis(generator)));
+        info.angle = distribution_angle(generator);
+        info.stone->transform->rotation = glm::angleAxis(info.angle, info.axis);
+        info.velocity = distribution_velocity(generator);
+    }
 }
 
 bool GameMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
@@ -271,7 +288,8 @@ bool GameMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
     if (evt.type == SDL_MOUSEMOTION) {
         if (evt.motion.state & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-            camera_spin += 5.0f * evt.motion.xrel / float(window_size.x);
+            viewpoint_angle += 5.0f * evt.motion.xrel / float(window_size.x);
+            current_time = glm::clamp(current_time + 2.0f * evt.motion.yrel / float(window_size.y), 0.0f, 1.0f);
             return true;
         }
         if (evt.motion.state & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
@@ -286,8 +304,12 @@ bool GameMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
 void GameMode::update(float elapsed)
 {
-    camera_parent_transform->rotation = glm::angleAxis(camera_spin, glm::vec3(0.0f, 0.0f, 1.0f));
+    camera_parent_transform->rotation = glm::angleAxis(viewpoint_angle, glm::vec3(0.0f, 0.0f, 1.0f));
     spot_parent_transform->rotation = glm::angleAxis(spot_spin, glm::vec3(0.0f, 0.0f, 1.0f));
+
+    for (auto &info : stones) {
+        info.stone->transform->rotation = glm::angleAxis(current_time * info.velocity + info.angle, info.axis);
+    }
 }
 
 //GameMode will render to some offscreen framebuffer(s).
@@ -298,7 +320,7 @@ struct Framebuffers
 
     //This framebuffer is used for fullscreen effects:
     GLuint color_tex = 0;
-    GLuint depth_rb = 0;
+    GLuint depth_tex = 0;
     GLuint fb = 0;
 
     //This framebuffer is used for shadow maps:
@@ -322,15 +344,27 @@ struct Framebuffers
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glBindTexture(GL_TEXTURE_2D, 0);
 
-            if (depth_rb == 0) glGenRenderbuffers(1, &depth_rb);
-            glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
-            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            if (depth_tex == 0) glGenTextures(1, &depth_tex);
+            glBindTexture(GL_TEXTURE_2D, depth_tex);
+            glTexImage2D(GL_TEXTURE_2D,
+                         0,
+                         GL_DEPTH_COMPONENT24,
+                         size.x,
+                         size.y,
+                         0,
+                         GL_DEPTH_COMPONENT,
+                         GL_UNSIGNED_BYTE,
+                         NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D, 0);
 
             if (fb == 0) glGenFramebuffers(1, &fb);
             glBindFramebuffer(GL_FRAMEBUFFER, fb);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_tex, 0);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tex, 0);
             check_fb();
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -405,12 +439,47 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
     GL_ERRORS();
 
+    {
+        //Draw scene to shadow map for target viewpoint:
+        glBindFramebuffer(GL_FRAMEBUFFER, fbs.fb);
+        glViewport(0, 0, drawable_size.x, drawable_size.y);
+        camera->aspect = drawable_size.x / float(drawable_size.y);
 
+        glClearColor(1.0f, 0.0f, 1.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
 
-    //Draw scene to off-screen framebuffer:
-    //glBindFramebuffer(GL_FRAMEBUFFER, fbs.fb);
+        //render only back faces to shadow map (prevent shadow speckles on fronts of objects):
+        glCullFace(GL_FRONT);
+        glEnable(GL_CULL_FACE);
+
+        // set camera to target viewpoint
+        camera_parent_transform->rotation = glm::angleAxis(target_viewpoint_angle, glm::vec3(0.0f, 0.0f, 1.0f));
+
+        // set stones to target time
+        for (auto &info : stones) {
+            info.stone->transform->rotation = glm::angleAxis(target_time * info.velocity + info.angle, info.axis);
+        }
+
+        scene->draw(camera, Scene::Object::ProgramTypeShadow);
+
+        // reset stones to current time
+        for (auto &info : stones) {
+            info.stone->transform->rotation = glm::angleAxis(current_time * info.velocity + info.angle, info.axis);
+        }
+
+        // reset camera to current viewpoint
+        camera_parent_transform->rotation = glm::angleAxis(viewpoint_angle, glm::vec3(0.0f, 0.0f, 1.0f));
+
+        glDisable(GL_CULL_FACE);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        GL_ERRORS();
+    }
+
     glViewport(0, 0, drawable_size.x, drawable_size.y);
-
     camera->aspect = drawable_size.x / float(drawable_size.y);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -422,75 +491,79 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	{
-		//set up light positions:
-		glUseProgram(texture_program->program);
+    {
+        //set up light positions:
+        glUseProgram(texture_program->program);
 
-		//don't use distant directional light at all (color == 0):
-		glUniform3fv(texture_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
-		glUniform3fv(texture_program->sun_direction_vec3, 1, glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
-		//use hemisphere light for subtle ambient light:
-		glUniform3fv(texture_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
-		glUniform3fv(texture_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
+        //don't use distant directional light at all (color == 0):
+        glUniform3fv(texture_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
+        glUniform3fv(texture_program->sun_direction_vec3,
+                     1,
+                     glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
+        //use hemisphere light for subtle ambient light:
+        glUniform3fv(texture_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
+        glUniform3fv(texture_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
 
-		glm::mat4 world_to_spot =
-			//This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
-			// coordinates ([0,1]^2) and depth map Z values ([0,1]):
-			glm::mat4(
-				0.5f, 0.0f, 0.0f, 0.0f,
-				0.0f, 0.5f, 0.0f, 0.0f,
-				0.0f, 0.0f, 0.5f, 0.0f,
-				0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
-			)
-			//this is the world-to-clip matrix used when rendering the shadow map:
-			* spot->make_projection() * spot->transform->make_world_to_local();
+        glm::mat4 world_to_spot =
+            //This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
+            // coordinates ([0,1]^2) and depth map Z values ([0,1]):
+            glm::mat4(
+                0.5f, 0.0f, 0.0f, 0.0f,
+                0.0f, 0.5f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.5f, 0.0f,
+                0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
+            )
+                //this is the world-to-clip matrix used when rendering the shadow map:
+                * spot->make_projection() * spot->transform->make_world_to_local();
 
-		glUniformMatrix4fv(texture_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
+        glUniformMatrix4fv(texture_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
 
-		glm::mat4 spot_to_world = spot->transform->make_local_to_world();
-		glUniform3fv(texture_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
-		glUniform3fv(texture_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
-		glUniform3fv(texture_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+        glm::mat4 spot_to_world = spot->transform->make_local_to_world();
+        glUniform3fv(texture_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
+        glUniform3fv(texture_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
+        glUniform3fv(texture_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
 
-		glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
-		glUniform2fv(texture_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
-	}
+        glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
+        glUniform2fv(texture_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+    }
 
-	{
-		//set up light positions:
-		glUseProgram(shady_program->program);
+    {
+        //set up light positions:
+        glUseProgram(shady_program->program);
 
-		//don't use distant directional light at all (color == 0):
-		glUniform3fv(shady_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
-		glUniform3fv(shady_program->sun_direction_vec3, 1, glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
-		//use hemisphere light for subtle ambient light:
-		glUniform3fv(shady_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
-		glUniform3fv(shady_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
+        //don't use distant directional light at all (color == 0):
+        glUniform3fv(shady_program->sun_color_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 0.0f)));
+        glUniform3fv(shady_program->sun_direction_vec3,
+                     1,
+                     glm::value_ptr(glm::normalize(glm::vec3(0.0f, 0.0f, -1.0f))));
+        //use hemisphere light for subtle ambient light:
+        glUniform3fv(shady_program->sky_color_vec3, 1, glm::value_ptr(glm::vec3(0.2f, 0.2f, 0.3f)));
+        glUniform3fv(shady_program->sky_direction_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
 
-		glm::mat4 world_to_spot =
-			//This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
-			// coordinates ([0,1]^2) and depth map Z values ([0,1]):
-			glm::mat4(
-				0.5f, 0.0f, 0.0f, 0.0f,
-				0.0f, 0.5f, 0.0f, 0.0f,
-				0.0f, 0.0f, 0.5f, 0.0f,
-				0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
-			)
-			//this is the world-to-clip matrix used when rendering the shadow map:
-			* spot->make_projection() * spot->transform->make_world_to_local();
+        glm::mat4 world_to_spot =
+            //This matrix converts from the spotlight's clip space ([-1,1]^3) into depth map texture
+            // coordinates ([0,1]^2) and depth map Z values ([0,1]):
+            glm::mat4(
+                0.5f, 0.0f, 0.0f, 0.0f,
+                0.0f, 0.5f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.5f, 0.0f,
+                0.5f, 0.5f, 0.5f + 0.00001f /* <-- bias */, 1.0f
+            )
+                //this is the world-to-clip matrix used when rendering the shadow map:
+                * spot->make_projection() * spot->transform->make_world_to_local();
 
-		glUniformMatrix4fv(shady_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
+        glUniformMatrix4fv(shady_program->light_to_spot_mat4, 1, GL_FALSE, glm::value_ptr(world_to_spot));
 
-		glm::mat4 spot_to_world = spot->transform->make_local_to_world();
-		glUniform3fv(shady_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
-		glUniform3fv(shady_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
-		glUniform3fv(shady_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+        glm::mat4 spot_to_world = spot->transform->make_local_to_world();
+        glUniform3fv(shady_program->spot_position_vec3, 1, glm::value_ptr(glm::vec3(spot_to_world[3])));
+        glUniform3fv(shady_program->spot_direction_vec3, 1, glm::value_ptr(-glm::vec3(spot_to_world[2])));
+        glUniform3fv(shady_program->spot_color_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
 
-		glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
-		glUniform2fv(shady_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+        glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
+        glUniform2fv(shady_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
 
         glUniform2fv(shady_program->screen_size_vec2, 1, glm::value_ptr(glm::vec2(drawable_size.x, drawable_size.y)));
-	}
+    }
 
 
     //This code binds texture index 1 to the shadow map:
@@ -504,9 +577,16 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
     //NOTE: however, these are parameters of the texture object, not the binding point, so there is no need to set
     // them *each frame*. I'm doing it here so that you are likely to see that they are being set.
 
-	// binding the gateway texture to index 2
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, *hourglass_neb_tex);
+    // binding the target shadow map to index 2
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, fbs.depth_tex);
+    //The shadow_depth_tex must have these parameters set to be used as a sampler2DShadow in the shader:
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LESS);
+
+    // binding the gateway texture to index 3
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, *hourglass_neb_tex);
 
     glActiveTexture(GL_TEXTURE0);
 
@@ -519,17 +599,4 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     GL_ERRORS();
-
-
-    //Copy scene from color buffer to screen, performing post-processing effects:
-    //glActiveTexture(GL_TEXTURE0);
-    //glBindTexture(GL_TEXTURE_2D, fbs.color_tex);
-    //glUseProgram(*blur_program);
-    //glBindVertexArray(*empty_vao);
-
-    //glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    //glUseProgram(0);
-    //glActiveTexture(GL_TEXTURE0);
-    //glBindTexture(GL_TEXTURE_2D, 0);
 }
