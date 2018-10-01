@@ -24,6 +24,8 @@ struct ShadyProgram
 		-1U; //color fades from zero to one as dot(spot_direction, spot_to_position) varies from outer_inner.x to outer_inner.y
 	GLuint light_to_spot_mat4 = -1U; //projects from lighting space (/world space) to spot light depth map space
 
+	GLuint screen_size_vec2 = -1U;
+
 	//textures:
 	//texture0 - texture for the surface
 	//texture1 - texture for spot light shadow map

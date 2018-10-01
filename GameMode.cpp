@@ -201,7 +201,7 @@ Load<Scene> scene(LoadTagDefault, []()
         }
 		else if (t->name == "Asteroid") {
 			obj->programs[Scene::Object::ProgramTypeDefault] = shady_program_info;
-			obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *hourglass_neb_tex;
+            obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
 		}
         else {
             obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *white_tex;
@@ -488,6 +488,8 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
 		glm::vec2 spot_outer_inner = glm::vec2(std::cos(0.5f * spot->fov), std::cos(0.85f * 0.5f * spot->fov));
 		glUniform2fv(shady_program->spot_outer_inner_vec2, 1, glm::value_ptr(spot_outer_inner));
+
+        glUniform2fv(shady_program->screen_size_vec2, 1, glm::value_ptr(glm::vec2(drawable_size.x, drawable_size.y)));
 	}
 
 
