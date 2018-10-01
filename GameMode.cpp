@@ -262,9 +262,13 @@ GameMode::~GameMode()
 void GameMode::reset_game()
 {
     target_time = distribution_time(generator);
+//    target_time = 0.0f;
     target_viewpoint_angle = glm::radians(distribution_angle(generator));
+//    target_viewpoint_angle = 0.0f;
     viewpoint_angle = glm::radians(distribution_angle(generator));
+//    viewpoint_angle = 0.0f;
     current_time = distribution_time(generator);
+//    current_time = 0.0f;
 
     for (auto &info : stones) {
         info.stone->transform->scale = glm::vec3(0.03f, 0.03f, 0.03f);
@@ -284,6 +288,14 @@ bool GameMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
     //ignore any keys that are the result of automatic key repeat:
     if (evt.type == SDL_KEYDOWN && evt.key.repeat) {
         return false;
+    }
+
+    // handle tracking the state of WSAD for movement control:
+    if (evt.type == SDL_KEYDOWN || evt.type == SDL_KEYUP) {
+        if (evt.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+            current_controls.snap = (evt.type == SDL_KEYDOWN);
+            return true;
+        }
     }
 
     if (evt.type == SDL_MOUSEMOTION) {
@@ -309,6 +321,16 @@ void GameMode::update(float elapsed)
 
     for (auto &info : stones) {
         info.stone->transform->rotation = glm::angleAxis(current_time * info.velocity + info.angle, info.axis);
+    }
+
+    if (current_controls.snap) {
+        current_controls.snap = false;
+
+        std::cout << "time difference: " << std::abs(current_time - target_time) << ", viewpoint difference: " << std::abs(viewpoint_angle - target_viewpoint_angle) << std::endl;
+        if (std::abs(current_time - target_time) < 0.01f && std::abs(viewpoint_angle - target_viewpoint_angle) < 0.1) {
+            current_time = target_time;
+            viewpoint_angle = target_viewpoint_angle;
+        }
     }
 }
 

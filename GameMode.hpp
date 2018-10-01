@@ -45,6 +45,12 @@ struct GameMode: public Mode
         {}
     };
 
+    struct Controls
+    {
+        bool snap;
+    };
+
+    Controls current_controls;
     float viewpoint_angle = 0.0f;
     float spot_spin = 0.0f;
     float current_time = 0.0f;

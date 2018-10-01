@@ -78,15 +78,20 @@ ShadyProgram::ShadyProgram()
         "	total_light += shadow * nl * amt * spot_color;\n"
         //"		fragColor = vec4(s,s,s, 1.0);\n" //DEBUG: just show shadow
         "	\n"
-        "vec2 lower_margin = screen_size / 3.0f;\n"
-        "vec2 upper_margin = 2.0f * screen_size / 3.0f;\n"
-        "vec2 scaling = 1.0f / (upper_margin - lower_margin);\n"
-        "	if (gl_FragCoord.x > lower_margin.x && gl_FragCoord.y > lower_margin.y &&"
-        "       gl_FragCoord.x < upper_margin.x && gl_FragCoord.y < upper_margin.y) {\n"
-        "		fragColor = texture(gateway_tex, (gl_FragCoord.xy - lower_margin) * scaling);\n"
+        "       //checking target viewpoint \n"
+        "       vec3 target_tex_coord = targetPosition.xyz / targetPosition.w;\n"
+        "       vec2 lower_margin = screen_size / 3.0f;\n"
+        "       vec2 upper_margin = 2.0f * screen_size / 3.0f;\n"
+        "       vec2 scaling = 1.0f / (upper_margin - lower_margin);\n"
+        "       float at_front = textureProj(target_depth_tex, targetPosition);\n"
+        "	if (target_tex_coord.x > (1.f/3.f) && target_tex_coord.y > (1.f/3.f) &&\n"
+        "       target_tex_coord.x < (2.f/3.f) && target_tex_coord.y < (2.f/3.f) &&\n"
+        "       at_front > 0.1f) {\n"
+        "		fragColor = texture(gateway_tex, target_tex_coord.xy);\n"
         "	} else {\n"
-        "      fragColor = texture(tex, texCoord) * vec4(color.rgb * total_light, color.a);\n"
+        "               fragColor = texture(tex, texCoord) * vec4(color.rgb * total_light, color.a);\n"
         "	}\n"
+//        "       fragColor = vec4(at_front, at_front, at_front, 1.0f);\n" //DEBUG
         "}\n"
     );
 
