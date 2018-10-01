@@ -52,6 +52,7 @@ ShadyProgram::ShadyProgram()
         "in vec4 color;\n"
         "in vec2 texCoord;\n"
         "in vec4 spotPosition;\n"
+        "in vec4 targetPosition;\n"
         "in vec4 gl_FragCoord;\n"
         "out vec4 fragColor;\n"
         "void main() {\n"
