@@ -133,6 +133,11 @@ Load<GLuint> marble_tex(LoadTagDefault, []()
     return new GLuint(load_texture(data_path("textures/marble.png")));
 });
 
+Load<GLuint> hourglass_neb_tex(LoadTagDefault, []()
+{
+	return new GLuint(load_texture(data_path("textures/hst_hourglass_nebula.png")));
+});
+
 Load<GLuint> white_tex(LoadTagDefault, []()
 {
     GLuint tex = 0;
@@ -196,7 +201,7 @@ Load<Scene> scene(LoadTagDefault, []()
         }
 		else if (t->name == "Asteroid") {
 			obj->programs[Scene::Object::ProgramTypeDefault] = shady_program_info;
-			obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
+			obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *hourglass_neb_tex;
 		}
         else {
             obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *white_tex;
@@ -496,6 +501,11 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LESS);
     //NOTE: however, these are parameters of the texture object, not the binding point, so there is no need to set
     // them *each frame*. I'm doing it here so that you are likely to see that they are being set.
+
+	// binding the gateway texture to index 2
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, *hourglass_neb_tex);
+
     glActiveTexture(GL_TEXTURE0);
 
     scene->draw(camera);
