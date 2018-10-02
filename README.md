@@ -9,9 +9,9 @@ Design Document: [default design](http://graphics.cs.cmu.edu/courses/15-466-f18/
 
 Screen Shot:
 
-![Screen Shot](gatewat-pre.png)
+![Screen Shot](gateway-pre.png)
 
-![Screen Shot2](gatewat-post.png)
+![Screen Shot2](gateway-post.png)
 
 How To Play:
 
