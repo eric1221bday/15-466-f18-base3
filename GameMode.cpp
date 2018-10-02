@@ -1,6 +1,7 @@
 #include "GameMode.hpp"
 
 #include "MenuMode.hpp"
+#include "TransitionMode.h"
 #include "Load.hpp"
 #include "MeshBuffer.hpp"
 #include "gl_errors.hpp" //helper for dumpping OpenGL error messages
@@ -269,6 +270,8 @@ void GameMode::reset_game()
 //    viewpoint_angle = 0.0f;
     current_time = distribution_time(generator);
 //    current_time = 0.0f;
+
+    current_target_texture = *hourglass_neb_tex;
 
     for (auto &info : stones) {
         info.stone->transform->scale = glm::vec3(0.03f, 0.03f, 0.03f);
@@ -644,4 +647,14 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     GL_ERRORS();
+}
+
+void GameMode::show_transition()
+{
+    std::shared_ptr<TransitionMode> transition = std::make_shared<TransitionMode>(current_target_texture);
+
+    std::shared_ptr<Mode> game = shared_from_this();
+    transition->background = game;
+
+    Mode::set_current(transition);
 }

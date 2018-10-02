@@ -33,6 +33,8 @@ struct GameMode: public Mode
 
     void reset_game();
 
+    void show_transition();
+
     struct StoneInfo
     {
         Scene::Object *stone;
@@ -57,6 +59,7 @@ struct GameMode: public Mode
     float target_time;
     float target_viewpoint_angle;
     static const uint32_t asteroid_num = 60;
+    GLuint current_target_texture;
     Scene::Camera *target_camera = nullptr;
     std::default_random_engine generator;
     std::uniform_real_distribution<float> distribution_x, distribution_y, distribution_z, distribution_axis,

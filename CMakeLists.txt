@@ -40,7 +40,7 @@ set(CLIENT_FILES
         Load.cpp
         MeshBuffer.cpp
         draw_text.cpp
-        Sound.cpp)
+        Sound.cpp TransitionMode.cpp TransitionMode.h)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CLIENT_FILES ${CLIENT_FILES} gl_shims.cpp)
