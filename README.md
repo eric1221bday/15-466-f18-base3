@@ -1,27 +1,35 @@
 # Game Information
 (Note: fill in this portion with information about your game.)
 
-Title: (TODO: your game's title)
+Title: Gateway
 
-Author: (TODO: your name)
+Author: Eric Fang
 
-Design Document: [TODO: name of design document](TODO: link to design document)
+Design Document: [default design](http://graphics.cs.cmu.edu/courses/15-466-f18/game3-designs/default/)
 
 Screen Shot:
 
-![Screen Shot](screenshot.png)
+![Screen Shot](gatewat-pre.png)
+
+![Screen Shot2](gatewat-post.png)
 
 How To Play:
 
-TODO: describe the controls and (if needed) goals/strategy.
+* You rotate your viewpoint and change the current time in order to animate a collection of asteroids until they line up to show a picture of a gate to a new world
+* The player uses the mouse (click and drag) to rotate the view around the vertical axis (left/right movement) and to change time between 0.0 and 1.0 (up/down movement). Time changes cause blobs to spin around their own axes, while view changes change the camera position.
+* If the user presses SPACE when the view is close to the correct view, the view animates to exactly the correct view, the target image is faded in, and then fades out to the next level.
 
 Changes From The Design Document:
 
-TODO: what did you need to add/remove/modify from the original design? Why?
+I was not able to implement the extra recursive image generation part of the design document due to time constraints.
 
 Good / Bad / Ugly Code:
 
-TODO: provide examples of code you wrote from this project that you think is good (elegant, simple, useful), bad (hack-y, brittle, unreadable), and ugly (particularly inelegant). Provide a sentence or two of justification for the examples.
+Good: The shader code itself is pretty neat in how it calculates the viewpoint and samples the texture.
+
+Bad: The fade in fade out code structure is a bit inelegant, in that I wanted it to be a separate mode so I didn't have to have as much going on in GameMode.cpp, but in order for the transition mode class to affect the game in some way I had to allocate and pass in a pointer flag to the class from GameMode class. I would've liked to pass in the class directly but there were various "shared_from_this" related inheritance issues which prevented that.
+
+Ugly: The actual OpenGL setup and draw calls were without question the ugliest part of this call. I attempted some management but most of the calls were still giant blocks of code in the draw function.
 
 # Changes In This Base Code
 
