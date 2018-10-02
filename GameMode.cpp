@@ -76,6 +76,20 @@ GLuint load_texture(std::string const &filename)
     return tex;
 }
 
+static Scene::Transform *camera_parent_transform = nullptr;
+
+static Scene::Camera *camera = nullptr;
+
+static Scene::Transform *spot_parent_transform = nullptr;
+
+static Scene::Lamp *spot = nullptr;
+
+static std::vector<std::string> stone_types = {};
+
+static std::vector<GLuint *> images = {};
+
+static Scene *current_scene = nullptr;
+
 Load<GLuint> wood_tex(LoadTagDefault, []()
 {
     return new GLuint(load_texture(data_path("textures/wood.png")));
@@ -93,7 +107,37 @@ Load<GLuint> stone_tex(LoadTagDefault, []()
 
 Load<GLuint> hourglass_neb_tex(LoadTagDefault, []()
 {
-    return new GLuint(load_texture(data_path("textures/hst_hourglass_nebula.png")));
+    GLuint *tex = new GLuint(load_texture(data_path("textures/hst_hourglass_nebula.png")));
+    images.push_back(tex);
+    return tex;
+});
+
+Load<GLuint> hst_lagoon_detail_tex(LoadTagDefault, []()
+{
+    GLuint *tex = new GLuint(load_texture(data_path("textures/hst_lagoon_detail.png")));
+    images.push_back(tex);
+    return tex;
+});
+
+Load<GLuint> hst_orion_nebula_tex(LoadTagDefault, []()
+{
+    GLuint *tex = new GLuint(load_texture(data_path("textures/hst_orion_nebula.png")));
+    images.push_back(tex);
+    return tex;
+});
+
+Load<GLuint> hst_pillars_m16_close_tex(LoadTagDefault, []()
+{
+    GLuint *tex = new GLuint(load_texture(data_path("textures/hst_pillars_m16_close.png")));
+    images.push_back(tex);
+    return tex;
+});
+
+Load<GLuint> hst_stingray_nebula_tex(LoadTagDefault, []()
+{
+    GLuint *tex = new GLuint(load_texture(data_path("textures/hst_stingray_nebula.png")));
+    images.push_back(tex);
+    return tex;
 });
 
 Load<GLuint> white_tex(LoadTagDefault, []()
@@ -112,65 +156,16 @@ Load<GLuint> white_tex(LoadTagDefault, []()
     return new GLuint(tex);
 });
 
-static Scene::Transform *camera_parent_transform = nullptr;
-
-static Scene::Camera *camera = nullptr;
-
-static Scene::Transform *spot_parent_transform = nullptr;
-
-static Scene::Lamp *spot = nullptr;
-
-static std::vector<std::string> stone_types = {};
-
-static Scene *current_scene = nullptr;
-
 Load<Scene> scene(LoadTagDefault, []()
 {
     Scene *ret = new Scene;
     current_scene = ret;
-
-    //pre-build some program info (material) blocks to assign to each object:
-//    Scene::Object::ProgramInfo texture_program_info;
-//    texture_program_info.program = texture_program->program;
-//    texture_program_info.vao = *meshes_for_texture_program;
-//    texture_program_info.mvp_mat4 = texture_program->object_to_clip_mat4;
-//    texture_program_info.mv_mat4x3 = texture_program->object_to_light_mat4x3;
-//    texture_program_info.itmv_mat3 = texture_program->normal_to_light_mat3;
-//
-//    Scene::Object::ProgramInfo depth_program_info;
-//    depth_program_info.program = depth_program->program;
-//    depth_program_info.vao = *meshes_for_depth_program;
-//    depth_program_info.mvp_mat4 = depth_program->object_to_clip_mat4;
-
 
     //load transform hierarchy:
     ret->load(data_path("gateway.scene"), [&](Scene &s, Scene::Transform *t, std::string const &m)
     {
         if (m.find("Stone") != std::string::npos) {
             stone_types.push_back(m);
-        }
-        else {
-//            Scene::Object *obj = s.new_object(t);
-//
-//            obj->programs[Scene::Object::ProgramTypeDefault] = texture_program_info;
-//            if (t->name == "Platform") {
-//                obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *wood_tex;
-//            }
-//            else if (t->name == "Pedestal") {
-//                obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *marble_tex;
-//            }
-//            else {
-//                obj->programs[Scene::Object::ProgramTypeDefault].textures[0] = *white_tex;
-//            }
-//
-//            obj->programs[Scene::Object::ProgramTypeShadow] = depth_program_info;
-//
-//            MeshBuffer::Mesh const &mesh = meshes->lookup(m);
-//            obj->programs[Scene::Object::ProgramTypeDefault].start = mesh.start;
-//            obj->programs[Scene::Object::ProgramTypeDefault].count = mesh.count;
-//
-//            obj->programs[Scene::Object::ProgramTypeShadow].start = mesh.start;
-//            obj->programs[Scene::Object::ProgramTypeShadow].count = mesh.count;
         }
     });
 
@@ -220,7 +215,8 @@ GameMode::GameMode()
       distribution_velocity(0.0f, 6.0f),
       distribution_time(0.0f, 1.0f),
       distribution_angle(0.0f, 360.f),
-      distribution_mesh(0, stone_types.size() - 1)
+      distribution_mesh(0, stone_types.size() - 1),
+      distribution_images(0, images.size() - 1)
 {
     Scene::Object::ProgramInfo shady_program_info;
     shady_program_info.program = shady_program->program;
@@ -253,6 +249,8 @@ GameMode::GameMode()
         stones.emplace_back(obj, 0.0f, 0.0f, glm::vec3());
     }
 
+    reset = std::make_shared<bool>(false);
+
     reset_game();
 }
 
@@ -271,7 +269,7 @@ void GameMode::reset_game()
     current_time = distribution_time(generator);
 //    current_time = 0.0f;
 
-    current_target_texture = *hourglass_neb_tex;
+    current_target_texture = *images[distribution_images(generator)];
 
     for (auto &info : stones) {
         info.stone->transform->scale = glm::vec3(0.03f, 0.03f, 0.03f);
@@ -319,6 +317,11 @@ bool GameMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
 void GameMode::update(float elapsed)
 {
+    if (*reset) {
+        reset_game();
+        *reset = false;
+    }
+
     camera_parent_transform->rotation = glm::angleAxis(viewpoint_angle, glm::vec3(0.0f, 0.0f, 1.0f));
     spot_parent_transform->rotation = glm::angleAxis(spot_spin, glm::vec3(0.0f, 0.0f, 1.0f));
 
@@ -329,10 +332,11 @@ void GameMode::update(float elapsed)
     if (current_controls.snap) {
         current_controls.snap = false;
 
-        std::cout << "time difference: " << std::abs(current_time - target_time) << ", viewpoint difference: " << std::abs(viewpoint_angle - target_viewpoint_angle) << std::endl;
-        if (std::abs(current_time - target_time) < 0.01f && std::abs(viewpoint_angle - target_viewpoint_angle) < 0.1) {
+        if (std::abs(current_time - target_time) < 0.05f && std::abs(std::fmod(viewpoint_angle, 2*M_PI) - target_viewpoint_angle) < 0.1) {
             current_time = target_time;
             viewpoint_angle = target_viewpoint_angle;
+
+            show_transition();
         }
     }
 }
@@ -634,7 +638,7 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
     // binding the gateway texture to index 3
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, *hourglass_neb_tex);
+    glBindTexture(GL_TEXTURE_2D, current_target_texture);
 
     glActiveTexture(GL_TEXTURE0);
 
@@ -642,6 +646,11 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     glActiveTexture(GL_TEXTURE0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -651,7 +660,7 @@ void GameMode::draw(glm::uvec2 const &drawable_size)
 
 void GameMode::show_transition()
 {
-    std::shared_ptr<TransitionMode> transition = std::make_shared<TransitionMode>(current_target_texture);
+    std::shared_ptr<TransitionMode> transition = std::make_shared<TransitionMode>(current_target_texture, reset);
 
     std::shared_ptr<Mode> game = shared_from_this();
     transition->background = game;

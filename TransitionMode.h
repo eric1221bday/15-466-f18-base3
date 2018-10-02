@@ -11,6 +11,7 @@
 #include <functional>
 #include <vector>
 #include <string>
+#include <memory>
 
 class TransitionMode: public Mode
 {
@@ -20,16 +21,21 @@ private:
     void draw(glm::uvec2 const &drawable_size) override;
 
     GLuint target_texture_id;
-    float background_fade = 1.0f;
-    float fade_speed = 1.0f;
+    float background_fade = 0.0f;
+    float fade_speed = 0.4f;
+    float bounds = 1.0f/3.0f;
+    float expand_speed = 1.f;
 
 public:
-    explicit TransitionMode(GLuint target_texture_id);
+    TransitionMode(GLuint target_texture_id, std::shared_ptr<bool> reset);
 
     virtual ~TransitionMode() = default;
 
     //will render this mode in the background if not null:
     std::shared_ptr<Mode> background;
+
+    // trigger reset in main game
+    std::shared_ptr<bool> reset;
 };
 
 

@@ -12,6 +12,7 @@
 
 #include <vector>
 #include <random>
+#include <memory>
 
 // The 'GameMode' mode is the main gameplay mode:
 
@@ -61,10 +62,11 @@ struct GameMode: public Mode
     static const uint32_t asteroid_num = 60;
     GLuint current_target_texture;
     Scene::Camera *target_camera = nullptr;
+    std::shared_ptr<bool> reset;
     std::default_random_engine generator;
     std::uniform_real_distribution<float> distribution_x, distribution_y, distribution_z, distribution_axis,
         distribution_velocity, distribution_time, distribution_angle;
-    std::uniform_int_distribution<uint32_t> distribution_mesh;
+    std::uniform_int_distribution<uint32_t> distribution_mesh, distribution_images;
     std::vector<StoneInfo> stones;
 
 };
