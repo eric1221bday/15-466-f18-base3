@@ -8,7 +8,7 @@ ShadyProgram::ShadyProgram()
     program = compile_program(
         "#version 330\n"
         "uniform mat4 object_to_clip;\n"
-        "uniform mat4x3 object_to_light;\n"
+        "uniform mat4 object_to_light;\n"
         "uniform mat3 normal_to_light;\n"
         "uniform mat4 light_to_spot;\n"
         "uniform mat4 light_to_target;\n"
@@ -16,7 +16,7 @@ ShadyProgram::ShadyProgram()
         "in vec3 Normal;\n"
         "in vec4 Color;\n"
         "in vec2 TexCoord;\n"
-        "out vec3 position;\n"
+        "out vec4 position;\n"
         "out vec3 normal;\n"
         "out vec4 color;\n"
         "out vec2 texCoord;\n"
@@ -25,8 +25,8 @@ ShadyProgram::ShadyProgram()
         "void main() {\n"
         "	gl_Position = object_to_clip * Position;\n"
         "	position = object_to_light * Position;\n"
-        "	spotPosition = light_to_spot * vec4(position, 1.0);\n"
-        "	targetPosition = light_to_target * vec4(position, 1.0);\n"
+        "	spotPosition = light_to_spot * vec4(position.xyz, 1.0);\n"
+        "	targetPosition = light_to_target * vec4(position.xyz, 1.0);\n"
         "	normal = normal_to_light * Normal;\n"
         "	color = Color;\n"
         "	texCoord = TexCoord;\n"
@@ -47,7 +47,7 @@ ShadyProgram::ShadyProgram()
         "uniform sampler2DShadow spot_depth_tex;\n"
         "uniform sampler2DShadow target_depth_tex;\n"
         "uniform sampler2D gateway_tex;\n"
-        "in vec3 position;\n"
+        "in vec4 position;\n"
         "in vec3 normal;\n"
         "in vec4 color;\n"
         "in vec2 texCoord;\n"
@@ -69,7 +69,7 @@ ShadyProgram::ShadyProgram()
         "		total_light += nl * sun_color;\n"
         "	}\n"
         "	//spot (point with fov + shadow map) light:\n"
-        "	vec3 l = normalize(spot_position - position);\n"
+        "	vec3 l = normalize(spot_position - position.xyz);\n"
         "	float nl = max(0.0, dot(n,l));\n"
         "	//TODO: look up shadow map\n"
         "	float d = dot(l,-spot_direction);\n"
@@ -93,7 +93,7 @@ ShadyProgram::ShadyProgram()
     );
 
     object_to_clip_mat4 = glGetUniformLocation(program, "object_to_clip");
-    object_to_light_mat4x3 = glGetUniformLocation(program, "object_to_light");
+    object_to_light_mat4 = glGetUniformLocation(program, "object_to_light");
     normal_to_light_mat3 = glGetUniformLocation(program, "normal_to_light");
 
     sun_direction_vec3 = glGetUniformLocation(program, "sun_direction");

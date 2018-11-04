@@ -234,7 +234,7 @@ void Scene::draw(glm::mat4 const &world_to_clip, Object::ProgramType program_typ
         glm::mat4 mvp = world_to_clip * local_to_world;
 
         //compute modelview (object space to camera local space) matrix for this object:
-        glm::mat4x3 mv = glm::mat4x3(local_to_world);
+        glm::mat4 mv = local_to_world;
 
         //NOTE: inverse cancels out transpose unless there is scale involved
         glm::mat3 itmv = glm::inverse(glm::transpose(glm::mat3(mv)));
@@ -245,8 +245,8 @@ void Scene::draw(glm::mat4 const &world_to_clip, Object::ProgramType program_typ
         if (info.mvp_mat4 != -1U) {
             glUniformMatrix4fv(info.mvp_mat4, 1, GL_FALSE, glm::value_ptr(mvp));
         }
-        if (info.mv_mat4x3 != -1U) {
-            glUniformMatrix4x3fv(info.mv_mat4x3, 1, GL_FALSE, glm::value_ptr(mv));
+        if (info.mv_mat4 != -1U) {
+            glUniformMatrix4fv(info.mv_mat4, 1, GL_FALSE, glm::value_ptr(mv));
         }
         if (info.itmv_mat3 != -1U) {
             glUniformMatrix3fv(info.itmv_mat3, 1, GL_FALSE, glm::value_ptr(itmv));

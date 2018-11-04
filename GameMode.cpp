@@ -222,7 +222,7 @@ GameMode::GameMode()
     shady_program_info.program = shady_program->program;
     shady_program_info.vao = *meshes_for_shady_program;
     shady_program_info.mvp_mat4 = shady_program->object_to_clip_mat4;
-    shady_program_info.mv_mat4x3 = shady_program->object_to_light_mat4x3;
+    shady_program_info.mv_mat4 = shady_program->object_to_light_mat4;
     shady_program_info.itmv_mat3 = shady_program->normal_to_light_mat3;
 
     Scene::Object::ProgramInfo depth_program_info;
